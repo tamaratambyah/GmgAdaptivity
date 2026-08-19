@@ -1,17 +1,7 @@
-using DrWatson, Test
-@quickactivate "GmgAdaptivity"
+using Test
+TESTCASE = get(ENV, "TESTCASE", "seq")
 
-# Here you include files using `srcdir`
-# include(srcdir("file.jl"))
-
-# Run test suite
-println("Starting tests")
-ti = time()
-
-@testset "GmgAdaptivity tests" begin
-    @test 1 == 1
+# MPI tests
+if TESTCASE ∈ ("all", "mpi", "mpi-darcy")
+   include("DarcyGMG/mpi/runtests.jl")
 end
-
-ti = time() - ti
-println("\nTest took total time of:")
-println(round(ti/60, digits = 3), " minutes")
