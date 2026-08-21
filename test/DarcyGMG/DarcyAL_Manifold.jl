@@ -83,14 +83,8 @@ uX(x) = VectorValue(x[1]*x[3], x[2]*x[3], x[3]^2 - 1)
 pX(x) = x[3]
 
 
-coarse_mesh = CubedSphereMesh(1.0)
-atlas_model = AtlasDiscreteModel(coarse_mesh,2,manifold_style=IntrinsicManifold())
-p_fe = 1
-γ = 1
-dir = @__DIR__
-
-# function darcy_gmg_manifold(dmodel::OctreeDistributedDiscreteModel,
-#   p_fe::Int,dir::String,u_exact::Function,p_exact::Function,γ=1.0,return_vtk=false;_i_am_main=true)
+function darcy_gmg_manifold(atlas_model,
+  p_fe::Int,dir::String,uX::Function,pX::Function,γ=1.0,return_vtk=false;_i_am_main=true)
 
   fmodel = refine(atlas_model)
   mh = ModelHierarchy([fmodel,atlas_model])
@@ -123,11 +117,6 @@ dir = @__DIR__
   p_cf = pX∘ambient_map_cf
   u_cf = meas_cf*((pinvJ∘covariant_basis_cf)⋅(uX∘ambient_map_cf))
 
-  # u_contra_cf = (pinvJ∘covariant_basis_cf)⋅(uX∘ambient_map_cf)
-
-  f1 = u_cf + ∇s(pX,Ω_atlas) # returns contravariant components
-  f2 = divs(uX,Ω_atlas)
-
   biform_u(u,v,dΩ) = ( ∫( (u⋅ (metric_cf⋅v))*(1.0/meas_cf) )dΩ
                      + ∫(γ*(divergence(u)*divergence(v))*(1.0/meas_cf) )dΩ
                       )
@@ -136,20 +125,14 @@ dir = @__DIR__
                             - ∫(divergence(v)*p)dΩ
                             + ∫(divergence(u)*q)dΩ
                             )
-  # liform((v,q),dΩ) = ( ∫( (f1⋅(metric_cf⋅v ))*(1.0/meas_cf)  )dΩ
-  #                   + ∫( (q*f2)*meas_cf )dΩ + ∫( γ*divergence(v)*f2  )dΩ
-  #                   )
 
-    # the manufactured solution is exactly the LHS operator
-    p_int = interpolate(p_cf,Q)
-    u_int = interpolate(u_cf,U)
-    liform((v,q),dΩ) = (
-      ∫( (u_int⋅ (metric_cf⋅v))*(1.0/meas_cf) )dΩ
-    + ∫( gradient(p_int)⋅v )dΩ # assume regularity to IBP
-    + ∫( q*(∇⋅u_int) )dΩ
-    + ∫(γ*(divergence(u_int)*divergence(v))*(1.0/meas_cf) )dΩ
-    )
-
+  _f = ∇s(pX,Ω_atlas)  # returns contravariant components
+  f2 = divs(uX,Ω_atlas)
+  liform((v,q),dΩ) = ( ∫( (u_cf⋅(metric_cf⋅v ))*(1.0/meas_cf)  )dΩ
+                      + ∫( (_f⋅(metric_cf⋅v ))  )dΩ ### ∇p⋅v
+                      + ∫( γ*divergence(v)*f2  )dΩ
+                      + ∫( (q*f2)*meas_cf )dΩ
+                    )
 
   a(u,v) = biform(u,v,dΩ)
   l(v) = liform(v,dΩ)
@@ -178,12 +161,12 @@ dir = @__DIR__
   )
 
   ##### solvers for the blocks of the preconditioner
-  solver_u = LUSolver()
+  # solver_u = LUSolver()
   # solver_u = CGSolver(JacobiLinearSolver();maxiter=1000,atol=1e-14,rtol=1.e-8,verbose=1,name="CG_velocity")
-  # solver_u = gmg
+  solver_u = gmg
 
-  solver_p = LUSolver()
-  # solver_p = CGSolver(JacobiLinearSolver();maxiter=1000,atol=1e-14,rtol=1.e-8,verbose=1,name="CG_pressure")
+  # solver_p = LUSolver()
+  solver_p = CGSolver(JacobiLinearSolver();maxiter=1000,atol=1e-14,rtol=1.e-8,verbose=1,name="CG_pressure")
 
 
   #### preconditioner
@@ -216,11 +199,11 @@ dir = @__DIR__
   lvl = nref(model)
   uh_proj = covariant_basis_cf ⋅ (1.0/meas_cf*uh)
   u_proj = covariant_basis_cf ⋅ (1.0/meas_cf*u_cf)
-  # if return_vtk
+  if return_vtk
     writevtk_with_cell_geomap(LatLonMapCellField(Ω_atlas),Ω_atlas,dir*"/Darcy_manifold_nref$(lvl)_p$(p_fe)",
           cellfields= ["uh"=>uh_proj, "ph"=>ph, "eu"=>uh_proj-u_proj, "ep"=>ep, "u_ex"=>u_proj,"p_ex"=>p_cf],
           append=false)
-  # end
+  end
 
 
 
@@ -240,7 +223,7 @@ end
 function main(models::AbstractArray;ps=[1],_i_am_main=true)
   dir = @__DIR__
   γ = 1
-  p_convergence_auto_test(ps,models,darcy_gmg_flat,dir,u_exact,p_exact,γ;_i_am_main=_i_am_main)
+  p_convergence_auto_test(ps,models,darcy_gmg_manifold,dir,uX,pX,γ;_i_am_main=_i_am_main)
 end
 
 
@@ -249,37 +232,30 @@ end
 ################################################################################
 #### Launcher for prepare jobs
 ################################################################################
-function launch(ranks,n_ref,p_fe::Int,γ,dir= @__DIR__,return_vtk=0)
-  n = 2^n_ref
-  _i_am_main = i_am_main(ranks)
+function launch(n_ref::Int,p_fe::Int,γ,dir= @__DIR__,return_vtk=0;_i_am_main=true)
 
   dir_convergence = dir*"/convergence"
   (_i_am_main && !isdir(dir_convergence)) && mkpath(dir_convergence)
 
-  coarse_model = CartesianDiscreteModel((0,1,0,1),(n,n),isperiodic=(true,true))
-  dmodel = OctreeDistributedDiscreteModel(ranks, coarse_model)
+  coarse_mesh = CubedSphereMesh(1.0)
+  atlas_model = AtlasDiscreteModel(coarse_mesh,n_ref,manifold_style=IntrinsicManifold())
 
-  # eu_l2, ep_l2, _ = darcy_gmg_flat(dmodel,p_fe,dir,u_exact,p_exact,γ,Bool(return_vtk);_i_am_main=_i_am_main)
-  eu_l2, ep_l2, u_iters, p_iters, kylov_iters = darcy_gmg_flat(dmodel,p_fe,dir,u_exact,p_exact,γ,Bool(return_vtk);_i_am_main=_i_am_main)
+  # eu_l2, ep_l2, _ = darcy_gmg_manifold(atlas_model,p_fe,dir,uX,pX,γ,Bool(return_vtk);_i_am_main=_i_am_main)
+  eu_l2, ep_l2, u_iters, p_iters, kylov_iters = darcy_gmg_manifold(atlas_model,p_fe,dir,uX,pX,γ,Bool(return_vtk);_i_am_main=_i_am_main)
 
-  lvl = nref(dmodel)
+  lvl = nref(atlas_model)
   simName = "Darcy_nref$(lvl)_p$(p_fe)_gamma$(γ)"
+  n = n_ref
   output = @strdict eu_l2 ep_l2 p_fe lvl n γ u_iters  p_iters  kylov_iters
   _i_am_main && safesave(datadir(dir_convergence, ("$(simName).jld2")), output)
 
-# end
-
-
-MPI.Init()
-np = MPI.Comm_size(MPI.COMM_WORLD)
-ranks = distribute_with_mpi(LinearIndices((np,)))
-
+end
 
 p_fe = 1
 n_ref = 4
 γ = 1
-dir = datadir("DarcyAL_Flat_GMG_patch")
+dir = datadir("DarcyAL_Manifold_GMG_patch")
 
-for _n_ref in collect(2:n_ref+1)
-  launch(ranks,_n_ref,p_fe,γ,dir)
+for _n_ref in collect(1:n_ref)
+  launch(_n_ref,p_fe,γ,dir)
 end

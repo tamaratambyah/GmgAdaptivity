@@ -92,7 +92,7 @@ end
 
 function get_jacobi_smoothers(mh)
   nlevs = num_levels(mh)
-  smoothers = Fill(RichardsonSmoother(JacobiLinearSolver(),10,2.0/3.0),nlevs-1)
+  smoothers = Fill(RichardsonSmoother(JacobiLinearSolver(),10,0.1),nlevs-1)
   level_parts = view(get_level_parts(mh),1:nlevs-1)
   return HierarchicalArray(smoothers,level_parts)
 end
@@ -113,7 +113,6 @@ end
 
 u_exact(x) = VectorValue(sin(2*π*x[1])*cos(2*π*x[2]), sin(2*π*x[2])*cos(2*π*x[1]) )
 p_exact(x) = 1 + 0.1*sin(2*π*x[1])*cos(2*π*x[2])
-
 
 
 function darcy_gmg_flat(dmodel::OctreeDistributedDiscreteModel,
@@ -154,8 +153,8 @@ function darcy_gmg_flat(dmodel::OctreeDistributedDiscreteModel,
 
   #### solvers
   biforms = map(mhl -> get_bilinear_form(mhl,biform_u,qdegree),mh)
-  smoothers = get_patch_smoothers(tests_u,biform_u,qdegree)
-  # smoothers =   get_block_jacobi_smoothers(tests_u)
+  # smoothers = get_patch_smoothers(tests_u,biform_u,qdegree)
+  smoothers =   get_block_jacobi_smoothers(tests_u)
   # smoothers =  get_jacobi_smoothers(mh) #Fill(RichardsonSmoother(JacobiLinearSolver(),10,0.2),num_levels(tests_u)-1)
 
   prolongations = setup_prolongation_operators(tests_u,qdegree;mode=:residual)
@@ -169,7 +168,7 @@ function darcy_gmg_flat(dmodel::OctreeDistributedDiscreteModel,
     pre_smoothers=smoothers,
     post_smoothers=smoothers,
     coarsest_solver=LUSolver(),
-    maxiter=20,mode=:preconditioner,verbose=_i_am_main,
+    maxiter=300,mode=:preconditioner,verbose=_i_am_main,
     atol=1.0e-14, rtol=1.0e-08
   )
 
@@ -246,9 +245,8 @@ end
 ################################################################################
 #### Launcher for prepare jobs
 ################################################################################
-function launch(ranks,n_ref,p_fe::Int,γ,dir= @__DIR__,return_vtk=0)
+function launch(ranks,n_ref,p_fe::Int,γ,dir= @__DIR__,return_vtk=0;_i_am_main=true)
   n = 2^n_ref
-  _i_am_main = i_am_main(ranks)
 
   dir_convergence = dir*"/convergence"
   (_i_am_main && !isdir(dir_convergence)) && mkpath(dir_convergence)
@@ -274,9 +272,9 @@ ranks = distribute_with_mpi(LinearIndices((np,)))
 
 p_fe = 1
 n_ref = 4
-γ = 1
-dir = datadir("DarcyAL_Flat_GMG_patch")
+γ = 10
+dir = datadir("DarcyAL_Flat_GMG_jacobi")
 
 for _n_ref in collect(2:n_ref+1)
-  launch(ranks,_n_ref,p_fe,γ,dir)
+  launch(ranks,_n_ref,p_fe,γ,dir;_i_am_main=i_am_main(ranks))
 end
