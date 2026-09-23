@@ -55,7 +55,7 @@ p_exact(x) = H_0 + 0.1*sin(2*π*x[1])*cos(2*π*x[2])
 # p_exact(x) = H_0 + 0.1*x[1]*(1-x[1])
 
 
-energy_exact(x) = 0.5*H_0*( u_exact(x)⋅u_exact(x) ) + 0.5*gravity*p_exact(x)
+energy_exact(x) = 0.5*H_0*( u_exact(x)⋅u_exact(x) ) + 0.5*gravity*p_exact(x)*p_exact(x)
 
 gravity = 1.0
 H_0 = 1.0

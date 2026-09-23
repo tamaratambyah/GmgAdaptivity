@@ -6,7 +6,8 @@ using LaTeXStrings
 
 include("plotools.jl")
 
-dir = datadir("DarcyAL_Flat")
+# dir = datadir("DarcyAL_Flat")
+dir = datadir("DarcyAL_Manifold")
 
 df = []
 df = collect_results(dir*"/convergence")

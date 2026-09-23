@@ -7,12 +7,14 @@ using LaTeXStrings
 include("plotools.jl")
 
 # dir = datadir("DarcyAL_Flat_CG" )
-dir = datadir("DarcyAL_Flat_GMG_patch" )
+# dir = datadir("DarcyAL_Flat_GMG_jacobi" )
+# dir = datadir("DarcyAL_Manifold_CG" )
+dir = datadir("DarcyAL_Manifold_GMG_patch" )
 
 df = []
 df = collect_results(dir*"/convergence")
 sort!(df,[:n])
-subset!(df, :γ=> γ -> γ .==1 )
+subset!(df, :γ=> γ -> γ .==10 )
 
 ##### External solver iterations
 kylov_iters = df[!,:kylov_iters]
