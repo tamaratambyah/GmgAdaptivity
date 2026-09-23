@@ -105,8 +105,6 @@ function transient_wave_equation(model,p_fe::Int,_dir::String,u_exact::Function,
 
   # Initial condition
   xh0 = interpolate([u_exact,p_exact],X)
-
-  ### NEW FUNCTION HERE
   solT = solve(solver, opT, t0, tF, xh0)
 
   ## iterate solution
@@ -168,12 +166,7 @@ function transient_wave_equation(model,p_fe::Int,_dir::String,u_exact::Function,
 end
 
 
-function _transient_wave_equation(model,p_fe::Int,_dir::String,u_exact::Function,p_exact::Function,
-  simName::String,t0=0.0,tF=2*π,CFL=0.1,
-  ls=LUSolver(),return_vtk=false;_i_am_main=true)
 
-
-end
 
 n = 8
 p_fe = 1
